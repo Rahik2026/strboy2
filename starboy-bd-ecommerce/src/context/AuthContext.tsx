@@ -7,6 +7,7 @@ import {
   onAuthStateChanged,
   signOut,
   updateProfile as updateFirebaseProfile,
+  User as FirebaseUser,
 } from "firebase/auth";
 import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
@@ -38,8 +39,51 @@ const ADMIN_EMAIL =
   process.env.NEXT_PUBLIC_ADMIN_EMAIL || "admin@starboybd.com";
 
 function makeEmail(identifier: string) {
-  if (identifier.includes("@")) return identifier;
-  return `${identifier.toLowerCase().replace(/\s+/g, "_")}@starboybd.com`;
+  const cleanIdentifier = identifier.trim();
+  if (cleanIdentifier.includes("@")) return cleanIdentifier;
+  return `${cleanIdentifier.toLowerCase().replace(/\s+/g, "_")}@starboybd.com`;
+}
+
+function createDefaultProfile(fbUser: FirebaseUser): UserProfile {
+  const email = fbUser.email || "";
+  const derivedName = email
+    .replace(/@starboybd\.com$/, "")
+    .replace(/_/g, " ");
+
+  return {
+    id: fbUser.uid,
+    username: fbUser.displayName || derivedName || "User",
+    phone: "",
+    email,
+    role:
+      email.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase()
+        ? "admin"
+        : "user",
+    createdAt: new Date().toISOString(),
+  };
+}
+
+async function loadUserProfile(fbUser: FirebaseUser): Promise<UserProfile> {
+  const defaultProfile = createDefaultProfile(fbUser);
+
+  if (!db) return defaultProfile;
+
+  try {
+    const userRef = doc(db, "users", fbUser.uid);
+    const snap = await getDoc(userRef);
+
+    if (snap.exists()) {
+      return { ...defaultProfile, ...(snap.data() as UserProfile) };
+    }
+
+    // Create a profile document for Firebase users that do not have one yet.
+    await setDoc(userRef, defaultProfile);
+    return defaultProfile;
+  } catch (error) {
+    console.error("Failed to load user profile", error);
+    // Do not treat a Firestore read/write problem as a logged-out user.
+    return defaultProfile;
+  }
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -49,38 +93,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!auth) {
+      setFirebaseUser(null);
+      setProfile(null);
       setIsLoading(false);
       return;
     }
+
     const unsub = onAuthStateChanged(auth, async (fbUser) => {
+      setIsLoading(true);
       setFirebaseUser(fbUser);
-      if (fbUser && db) {
-        const snap = await getDoc(doc(db, "users", fbUser.uid));
-        if (snap.exists()) {
-          setProfile(snap.data() as UserProfile);
+
+      try {
+        if (fbUser) {
+          const userProfile = await loadUserProfile(fbUser);
+          setProfile(userProfile);
         } else {
-          const email = fbUser.email || "";
-          const derivedName = email
-            .replace(/@starboybd\.com$/, "")
-            .replace(/_/g, " ");
-          const defaultProfile: UserProfile = {
-            id: fbUser.uid,
-            username: fbUser.displayName || derivedName || "User",
-            phone: "",
-            email: email,
-            role:
-              email.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase()
-                ? "admin"
-                : "user",
-            createdAt: new Date().toISOString(),
-          };
-          setProfile(defaultProfile);
+          setProfile(null);
         }
-      } else {
-        setProfile(null);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     });
+
     return () => unsub();
   }, []);
 
@@ -90,8 +124,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (identifier: string, password: string) => {
     if (!auth) throw new Error("Auth not initialized");
-    const email = makeEmail(identifier);
-    await signInWithEmailAndPassword(auth, email, password);
+    setIsLoading(true);
+    try {
+      const email = makeEmail(identifier);
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      const userProfile = await loadUserProfile(cred.user);
+      setFirebaseUser(cred.user);
+      setProfile(userProfile);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const register = async (data: RegisterData) => {
@@ -121,6 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     await setDoc(doc(db, "users", cred.user.uid), newProfile);
+    setFirebaseUser(cred.user);
     setProfile(newProfile);
   };
 
