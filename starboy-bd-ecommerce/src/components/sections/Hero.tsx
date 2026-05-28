@@ -21,7 +21,7 @@ export default function Hero() {
   }, []);
 
   const title = settings.hero_title || "THE MODERN STANDARD.";
-  const subtitle = settings.hero_subtitle || "Elevate your style with premium, ready-to-wear collections crafted for the modern Bangladeshi gentleman.";
+  const subtitle = settings.hero_subtitle || "Elevate your style with premium, ready-to-wear collections. 📍Location: College road, Korim mes.";
   const cta1 = settings.hero_cta_primary || "Shop New Arrivals";
   const cta2 = settings.hero_cta_secondary || "Explore Collections";
 
