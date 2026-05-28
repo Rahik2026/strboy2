@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  User, Heart, ShoppingBag, MessageCircle, Settings, Package, LogOut, Camera,
+  User, Heart, ShoppingBag, MessageCircle, Settings, Package, LogOut, Camera, Loader2,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useWishlist } from "@/context/WishlistContext";
@@ -23,7 +23,7 @@ const tabs = [
 ];
 
 export default function DashboardPage() {
-  const { user, isAdmin, logout, uploadAvatar } = useAuth();
+  const { user, isAdmin, isLoading, logout, uploadAvatar } = useAuth();
   const { items: wishlistItems } = useWishlist();
   const { items: cartItems } = useCart();
   const [activeTab, setActiveTab] = useState("profile");
@@ -51,6 +51,17 @@ export default function DashboardPage() {
     await uploadAvatar(file);
     setUploading(false);
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-surface">
+        <div className="text-center text-ink-500">
+          <Loader2 className="w-6 h-6 animate-spin mx-auto mb-3" />
+          <p className="text-sm">Loading your dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return (
