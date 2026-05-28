@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Eye, EyeOff, User, Lock, Phone, Mail, ArrowLeft } from "lucide-react";
@@ -9,7 +9,7 @@ import Link from "next/link";
 import toast from "react-hot-toast";
 
 export default function AuthPage() {
-  const { login, register } = useAuth();
+  const { user, isAdmin, isLoading, login, register } = useAuth();
   const router = useRouter();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [showPass, setShowPass] = useState(false);
@@ -20,13 +20,19 @@ export default function AuthPage() {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
 
+  useEffect(() => {
+    if (!isLoading && user) {
+      router.replace(isAdmin ? "/admin" : "/dashboard");
+    }
+  }, [isAdmin, isLoading, router, user]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
       await login(username, password);
       toast.success("Welcome back!");
-      router.push("/dashboard");
+      router.replace("/dashboard");
     } catch (err: any) {
       toast.error(err.message || "Login failed");
     } finally {
@@ -44,7 +50,7 @@ export default function AuthPage() {
     try {
       await register({ username, password, phone, email: email || undefined });
       toast.success("Account created!");
-      router.push("/dashboard");
+      router.replace("/dashboard");
     } catch (err: any) {
       toast.error(err.message || "Registration failed");
     } finally {
